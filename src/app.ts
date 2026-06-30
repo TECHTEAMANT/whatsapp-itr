@@ -17,13 +17,22 @@ app.use(cors({
     origin: config.allowedOrigins.includes('*') ? '*' : config.allowedOrigins,
     credentials: true
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 // Log all incoming requests
 app.use((req, res, next) => {
     logger.info(`Incoming Request: [${req.method}] ${req.url}`);
     next();
+});
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Handle JSON parsing errors
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'status' in err && err.status === 400 && 'body' in err) {
+        logger.error(`Bad JSON payload from [${req.method}] ${req.url}: ${err.message}`);
+        return res.status(400).json({ status: 'error', message: 'Invalid JSON payload' });
+    }
+    next(err);
 });
 
 // Global API Key Auth
