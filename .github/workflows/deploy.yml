@@ -69,18 +69,22 @@ jobs:
           username: ${{ secrets.AZURE_VM_USERNAME }}
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
-            # Navigate to the project directory on your VM
-            # Make sure this directory exists and contains your docker-compose.yml and .env files
+            # Create the project directory if it doesn't exist
+            mkdir -p ~/whatsapp-microservice
             cd ~/whatsapp-microservice
+            
+            # Ensure repository name is lowercase for Docker
+            REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            IMAGE_URL="ghcr.io/${REPO_LOWER}:latest"
             
             # Log in to GitHub Container Registry on the VM
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Pull the latest image
-            docker pull ghcr.io/${{ github.repository }}:latest
+            docker pull $IMAGE_URL
             
-            # Export the image name for docker-compose to use
-            export API_IMAGE=ghcr.io/${{ github.repository }}:latest
+            # Export the image name for docker compose to use
+            export API_IMAGE=$IMAGE_URL
             
             # Restart the docker containers with the new image
-            docker-compose up -d --no-deps whatsapp-api
+            docker compose up -d --no-deps whatsapp-api
