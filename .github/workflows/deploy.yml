@@ -87,4 +87,4 @@ jobs:
             export API_IMAGE=$IMAGE_URL
             
             # Restart the docker containers with the new image
-            docker compose up -d --no-deps whatsapp-api
+            docker compose up -d
