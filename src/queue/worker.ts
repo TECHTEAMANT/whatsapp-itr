@@ -3,6 +3,7 @@ import { redis } from '../database/redis';
 import { logger } from '../utils/logger';
 import { sendPdfDocumentFromUrl, sendPdfDocumentFromBase64 } from '../services/whatsapp/messageSender';
 import { pool } from '../database/connection';
+import { sessions } from '../services/whatsapp/sessionManager';
 
 export const setupWorker = () => {
     const worker = new Worker('messageQueue', async (job: Job) => {
@@ -35,6 +36,33 @@ export const setupWorker = () => {
                 await pool.query(
                     `INSERT INTO message_logs (user_id, target_number, message_type, status, error_message) VALUES ($1, $2, $3, $4, $5)`,
                     [userId, targetNumber, 'pdf', 'failed', error.message]
+                );
+                
+                throw error;
+            }
+        } else if (job.name === 'sendExcelMessage') {
+            const { userId, targetNumber, messageText } = job.data;
+            try {
+                const sock = sessions.get(userId);
+                if (!sock) throw new Error('WhatsApp session not connected for this user.');
+                
+                const jid = targetNumber.includes('@') ? targetNumber : `${targetNumber}@s.whatsapp.net`;
+                await sock.sendMessage(jid, { text: messageText });
+                
+                // Log success in database
+                await pool.query(
+                    `INSERT INTO message_logs (user_id, target_number, message_type, status) VALUES ($1, $2, $3, $4)`,
+                    [userId, targetNumber, 'text', 'sent']
+                );
+                
+                logger.info(`Successfully processed excel text job ${job.id}`);
+            } catch (error: any) {
+                logger.error(`Error processing excel text job ${job.id}: ${error.message}`);
+                
+                // Log failure in database
+                await pool.query(
+                    `INSERT INTO message_logs (user_id, target_number, message_type, status, error_message) VALUES ($1, $2, $3, $4, $5)`,
+                    [userId, targetNumber, 'text', 'failed', error.message]
                 );
                 
                 throw error;

@@ -39,3 +39,21 @@ export const addPdfJobToQueue = async (
         throw error;
     }
 };
+
+export const addExcelMessageJobToQueue = async (
+    userId: string,
+    targetNumber: string,
+    messageText: string
+) => {
+    try {
+        const job = await messageQueue.add('sendExcelMessage', {
+            userId,
+            targetNumber,
+            messageText
+        });
+        return job.id;
+    } catch (error) {
+        logger.error(`Failed to add excel job to queue: ${error}`);
+        throw error;
+    }
+};

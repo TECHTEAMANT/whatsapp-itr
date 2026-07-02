@@ -14,7 +14,7 @@ const app = express();
 // Middlewares
 app.use(helmet());
 app.use(cors({
-    origin: config.allowedOrigins.includes('*') ? '*' : config.allowedOrigins,
+    origin: config.allowedOrigins.includes('*') ? true : config.allowedOrigins,
     credentials: true
 }));
 // Log all incoming requests

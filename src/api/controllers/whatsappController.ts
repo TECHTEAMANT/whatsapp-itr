@@ -4,7 +4,10 @@ import { addPdfJobToQueue } from '../../queue/producer';
 import QRCode from 'qrcode';
 import { logger } from '../../utils/logger';
 import { pool } from '../../database/connection';
-
+import * as xlsx from 'xlsx';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import { addExcelMessageJobToQueue } from '../../queue/producer';
 export const startSession = async (req: Request, res: Response) => {
     const { userId } = req.body;
     
@@ -116,5 +119,103 @@ export const getGroups = async (req: Request, res: Response) => {
     } catch (error: any) {
         logger.error(`Error fetching groups for ${userId}: ${error.message}`);
         res.status(500).json({ error: 'Failed to fetch WhatsApp groups' });
+    }
+};
+
+export const excelWhatsapp = async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.body;
+        const file = req.file;
+
+        if (!userId) {
+            return res.status(400).json({ error: 'userId is required' });
+        }
+
+        if (!file) {
+            return res.status(400).json({ error: 'Excel file is required' });
+        }
+
+        const sock = sessions.get(userId);
+        if (!sock) {
+            return res.status(400).json({ error: 'WhatsApp session not connected for this user.' });
+        }
+
+        const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // header: 1 returns 2D array, which makes it easy to work with row/column indices
+        const data: any[][] = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Skip the first row (header) by starting loop from 1
+        let messagesSent = 0;
+        let errors = [];
+
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            
+            // Check if row has enough columns (at least 3 columns for phone number (col 2) and message (col 3))
+            // Columns are 0-indexed: col 2 -> index 1, col 3 -> index 2
+            if (!row || row.length < 3) continue;
+
+            const rawPhoneNumber = row[1]?.toString().trim();
+            const message = row[2]?.toString().trim();
+
+            if (!rawPhoneNumber || !message) continue;
+
+            // Add +91 to phone number if it doesn't have it, but for baileys we just need 91 without the +
+            let targetNumber = rawPhoneNumber;
+            
+            // Clean non-digit characters just in case, but keep the + if present initially
+            const cleanNumber = targetNumber.replace(/\D/g, '');
+            
+            if (cleanNumber.length === 10) {
+                targetNumber = `91${cleanNumber}`;
+            } else if (cleanNumber.startsWith('91') && cleanNumber.length === 12) {
+                targetNumber = cleanNumber;
+            } else {
+                targetNumber = cleanNumber; // Fallback
+            }
+
+            const jid = `${targetNumber}@s.whatsapp.net`;
+
+            try {
+                // Generate token valid until 31 July 2026
+                const expirationDate = Math.floor(new Date('2026-07-31T23:59:59Z').getTime() / 1000);
+                
+                // Encrypt payload to make URL opaque and secure
+                const secretKey = crypto.createHash('sha256').update(process.env.JWT_SECRET || 'jF3HbDUuYfxfUjeDJRVg').digest();
+                const iv = crypto.randomBytes(16);
+                const cipher = crypto.createCipheriv('aes-256-cbc', secretKey, iv);
+                
+                const payload = `${cleanNumber}|${expirationDate}`;
+                let encrypted = cipher.update(payload, 'utf8', 'hex');
+                encrypted += cipher.final('hex');
+                
+                // Format: iv_encrypted
+                const token = `${iv.toString('hex')}_${encrypted}`;
+
+                const baseUrl = process.env.BACKEND_API_URL || 'http://localhost:5001';
+                const uploadLink = `${baseUrl}/api/v1/whatsapp-upload/form?token=${token}`;
+                const finalMessage = `${message}\n\nUpload your document here: ${uploadLink}`;
+
+                await addExcelMessageJobToQueue(userId, jid, finalMessage);
+                messagesSent++;
+                
+            } catch (err: any) {
+                logger.error(`Error queuing message for ${targetNumber}: ${err.message}`);
+                errors.push({ number: targetNumber, error: err.message });
+            }
+        }
+
+        res.json({ 
+            status: 'success', 
+            message: `Processed excel file. Queued ${messagesSent} messages for background sending.`,
+            errors: errors.length > 0 ? errors : undefined
+        });
+
+    } catch (error: any) {
+        logger.error(`Error in excelWhatsapp: ${error.message}`);
+        res.status(500).json({ error: 'Failed to process excel file' });
     }
 };
