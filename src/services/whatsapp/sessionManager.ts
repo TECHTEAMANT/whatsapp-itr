@@ -39,15 +39,30 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
             if (connection === 'close') {
                 const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
                 logger.info(`Connection closed for ${userId}, reconnecting: ${shouldReconnect}`);
+
+                if (sessions.get(userId) === sock) {
+                    sessions.delete(userId);
+                }
                 
                 if (shouldReconnect) {
-                    setTimeout(() => initSession(userId, onQr), 5000);
+                    await pool.query(
+                        `INSERT INTO users_whatsapp_sessions (user_id, session_status) VALUES ($1, $2)
+                         ON CONFLICT (user_id) DO UPDATE SET session_status = $2, updated_at = CURRENT_TIMESTAMP`,
+                        [userId, 'RECONNECTING']
+                    );
+
+                    setTimeout(() => {
+                        if (!sessions.has(userId)) {
+                            initSession(userId, onQr).catch((error) => {
+                                logger.error(error, `Error reconnecting session for user ${userId}:`);
+                            });
+                        }
+                    }, 5000);
                 } else {
-                    sessions.delete(userId);
                     // Update DB status to disconnected
                     await pool.query(
                         `INSERT INTO users_whatsapp_sessions (user_id, session_status) VALUES ($1, $2)
-                         ON CONFLICT (user_id) DO UPDATE SET session_status = $2`,
+                         ON CONFLICT (user_id) DO UPDATE SET session_status = $2, updated_at = CURRENT_TIMESTAMP`,
                         [userId, 'DISCONNECTED']
                     );
                     
@@ -66,7 +81,7 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
                 await pool.query(
                     `INSERT INTO users_whatsapp_sessions (user_id, whatsapp_number, session_status) 
                      VALUES ($1, $2, $3)
-                     ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = $2, session_status = $3`,
+                     ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = $2, session_status = $3, updated_at = CURRENT_TIMESTAMP`,
                     [userId, userNumber, 'CONNECTED']
                 );
             }
@@ -84,7 +99,7 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
 export const autoReconnectSessions = async () => {
     try {
         const { rows } = await pool.query(
-            `SELECT user_id FROM users_whatsapp_sessions WHERE session_status = 'CONNECTED'`
+            `SELECT user_id FROM users_whatsapp_sessions WHERE session_status IN ('CONNECTED', 'RECONNECTING')`
         );
         
         logger.info(`Found ${rows.length} sessions to auto-reconnect`);
