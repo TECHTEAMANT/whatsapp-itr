@@ -26,6 +26,8 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
             logger: logger.child({ level: 'silent' }) as any, // Suppress excessive Baileys logs
             syncFullHistory: false, // Don't fetch history to save memory
             browser: ['AccountsNTax', 'Chrome', '1.0.0'], // Override default browser to avoid WhatsApp blocking
+            keepAliveIntervalMs: 30 * 60 * 1000, // 30 minutes instead of default 30 seconds — reduces "syncing" notifications on user's phone
+            markOnlineOnConnect: false, // Don't mark session as online on connect — suppresses WhatsApp sync notification
         });
 
         sock.ev.on('connection.update', async (update) => {
