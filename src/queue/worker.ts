@@ -70,10 +70,10 @@ export const setupWorker = () => {
         }
     }, {
         connection: redis as any,
-        concurrency: 5, // Process up to 5 jobs concurrently across the worker
+        concurrency: 1, // MUST be 1. WhatsApp bans accounts that send concurrent bulk messages. Simulates a single human.
         limiter: {
-            max: 10,
-            duration: 10000 // Max 10 jobs per 10 seconds to avoid WhatsApp rate limits
+            max: 1, // Only send 1 message...
+            duration: 15000 // ...every 15 seconds. This is a much safer threshold for WhatsApp's anti-spam system.
         }
     });
 
