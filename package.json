@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^6.7.5",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "bullmq": "^5.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

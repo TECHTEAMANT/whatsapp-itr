@@ -25,9 +25,9 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
             printQRInTerminal: false,
             logger: logger.child({ level: 'silent' }) as any, // Suppress excessive Baileys logs
             syncFullHistory: false, // Don't fetch history to save memory
-            browser: ['AccountsNTax', 'Chrome', '1.0.0'], // Override default browser to avoid WhatsApp blocking
-            keepAliveIntervalMs: 30 * 60 * 1000, // 30 minutes instead of default 30 seconds — reduces "syncing" notifications on user's phone
-            markOnlineOnConnect: false, // Don't mark session as online on connect — suppresses WhatsApp sync notification
+            browser: ['Mac OS', 'Chrome', '121.0.6167.159'], // Use standard desktop browser to avoid WhatsApp blocking and sync issues
+            keepAliveIntervalMs: 30000, // Revert to default 30s to keep connection healthy and avoid WhatsApp pushing sync notifications
+            markOnlineOnConnect: true, // Mark online to resolve the persistent "Checking for new messages" / "Syncing" notification
         });
 
         sock.ev.on('connection.update', async (update) => {
