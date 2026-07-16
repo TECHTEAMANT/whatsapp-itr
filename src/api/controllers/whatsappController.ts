@@ -195,7 +195,9 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
                 // Format: iv_encrypted
                 const token = `${iv.toString('hex')}_${encrypted}`;
 
-                const baseUrl = process.env.BACKEND_API_URL || 'http://localhost:5001';
+                // Ensure there is no trailing slash on the base URL to avoid double-slashes in the link
+                const rawBaseUrl = process.env.BACKEND_API_URL || 'http://localhost:5001';
+                const baseUrl = rawBaseUrl.replace(/\/+$/, '');
                 const uploadLink = `${baseUrl}/api/v1/whatsapp-upload/form?token=${token}`;
                 
                 // Replace [Link] if it exists, otherwise append to bottom
