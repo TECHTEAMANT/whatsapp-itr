@@ -197,7 +197,14 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
 
                 const baseUrl = process.env.BACKEND_API_URL || 'http://localhost:5001';
                 const uploadLink = `${baseUrl}/api/v1/whatsapp-upload/form?token=${token}`;
-                const finalMessage = `${message}\n\nUpload your document here: ${uploadLink}`;
+                
+                // Replace [Link] if it exists, otherwise append to bottom
+                let finalMessage = message;
+                if (message.includes('[Link]')) {
+                    finalMessage = message.replace('[Link]', uploadLink);
+                } else {
+                    finalMessage = `${message}\n\nUpload your document here: ${uploadLink}`;
+                }
 
                 await addExcelMessageJobToQueue(userId, jid, finalMessage);
                 messagesSent++;
