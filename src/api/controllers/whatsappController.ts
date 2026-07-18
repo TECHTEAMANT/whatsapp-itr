@@ -154,12 +154,11 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
             
-            // Check if row has enough columns (at least 3 columns for phone number (col 2) and message (col 3))
-            // Columns are 0-indexed: col 2 -> index 1, col 3 -> index 2
-            if (!row || row.length < 3) continue;
+            // Columns are 0-indexed: col A -> index 0 (Phone Number), col B -> index 1 (Message)
+            if (!row || row.length < 2) continue;
 
-            const rawPhoneNumber = row[1]?.toString().trim();
-            const message = row[2]?.toString().trim();
+            const rawPhoneNumber = row[0]?.toString().trim();
+            const message = row[1]?.toString().trim();
 
             if (!rawPhoneNumber || !message) continue;
 
