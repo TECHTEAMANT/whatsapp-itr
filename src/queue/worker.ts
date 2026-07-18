@@ -47,6 +47,12 @@ export const setupWorker = () => {
                 if (!sock) throw new Error('WhatsApp session not connected for this user.');
                 
                 const jid = targetNumber.includes('@') ? targetNumber : `${targetNumber}@s.whatsapp.net`;
+
+                // Mimic typing before sending the message
+                await sock.sendPresenceUpdate('composing', jid);
+                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds typing delay
+                await sock.sendPresenceUpdate('paused', jid);
+
                 await sock.sendMessage(jid, { text: messageText });
                 
                 // Log success in database
@@ -73,7 +79,7 @@ export const setupWorker = () => {
         concurrency: 1, // MUST be 1. WhatsApp bans accounts that send concurrent bulk messages. Simulates a single human.
         limiter: {
             max: 1, // Only send 1 message...
-            duration: 15000 // ...every 15 seconds. This is a much safer threshold for WhatsApp's anti-spam system.
+            duration: 45000 // ...every 45 seconds. This is a much safer threshold for WhatsApp's anti-spam system.
         }
     });
 

@@ -23,6 +23,11 @@ export const sendPdfDocument = async (
 
     const pdfBuffer = fs.readFileSync(pdfPath);
 
+    // Mimic typing before sending the document
+    await sock.sendPresenceUpdate('composing', jid);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await sock.sendPresenceUpdate('paused', jid);
+
     await sock.sendMessage(jid, {
         document: pdfBuffer,
         mimetype: 'application/pdf',
@@ -69,6 +74,12 @@ export const sendPdfDocumentFromUrl = async (
     const pdfBuffer = await downloadPdfBuffer(pdfUrl);
     
     logger.info(`Sending PDF to ${targetNumber} for user ${userId}`);
+    
+    // Mimic typing before sending the document
+    await sock.sendPresenceUpdate('composing', jid);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await sock.sendPresenceUpdate('paused', jid);
+
     await sock.sendMessage(jid, {
         document: pdfBuffer,
         mimetype: 'application/pdf',
@@ -97,6 +108,12 @@ export const sendPdfDocumentFromBase64 = async (
     const pdfBuffer = Buffer.from(base64Data, 'base64');
     
     logger.info(`Sending Base64 PDF to ${targetNumber} for user ${userId}`);
+    
+    // Mimic typing before sending the document
+    await sock.sendPresenceUpdate('composing', jid);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await sock.sendPresenceUpdate('paused', jid);
+
     await sock.sendMessage(jid, {
         document: pdfBuffer,
         mimetype: 'application/pdf',
