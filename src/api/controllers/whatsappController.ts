@@ -227,3 +227,35 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to process excel file' });
     }
 };
+
+export const sendTextMessage = async (req: Request, res: Response) => {
+    const { userId, targetNumber, message } = req.body;
+    
+    if (!userId || !targetNumber || !message) {
+        return res.status(400).json({ error: 'userId, targetNumber, and message are required' });
+    }
+
+    const sock = sessions.get(userId);
+    if (!sock) {
+        return res.status(400).json({ error: 'WhatsApp session not connected for this user.' });
+    }
+
+    try {
+        let formattedNumber = targetNumber.toString().trim();
+        const cleanNumber = formattedNumber.replace(/\D/g, '');
+        if (cleanNumber.length === 10) {
+            formattedNumber = `91${cleanNumber}`;
+        } else if (cleanNumber.startsWith('91') && cleanNumber.length === 12) {
+            formattedNumber = cleanNumber;
+        } else {
+            formattedNumber = cleanNumber;
+        }
+
+        const jobId = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim());
+        res.json({ status: 'queued', jobId });
+    } catch (error: any) {
+        logger.error(`Error queuing text message for ${userId}: ${error.message}`);
+        res.status(500).json({ error: 'Failed to queue text message' });
+    }
+};
+

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { startSession, getSessionStatus, sendPdf, getGroups, excelWhatsapp } from '../controllers/whatsappController';
+import { startSession, getSessionStatus, sendPdf, sendTextMessage, getGroups, excelWhatsapp } from '../controllers/whatsappController';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -18,6 +18,10 @@ router.post(
     '/messages/send-pdf',
     sendPdf
 );
+router.post(
+    '/messages/send-text',
+    sendTextMessage
+);
 router.get(
     '/groups/:userId',
     getGroups
@@ -29,3 +33,4 @@ router.post(
 );
 
 export default router;
+
