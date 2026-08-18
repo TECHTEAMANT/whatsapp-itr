@@ -78,8 +78,7 @@ export const getSessionStatus = async (req: Request, res: Response) => {
         
         res.json({
             status: isMemoryActive ? 'CONNECTED' : dbStatus,
-            connectedNumber,
-            lastUpdated: rows[0].updated_at
+            connectedNumber
         });
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to retrieve session status' });
