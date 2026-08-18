@@ -58,15 +58,27 @@ export const getSessionStatus = async (req: Request, res: Response) => {
         );
         
         if (rows.length === 0) {
-            return res.json({ status: 'not_found' });
+            return res.json({ status: 'not_found', connectedNumber: null });
         }
 
-        const isMemoryActive = sessions.has(userId);
+        const sock = sessions.get(userId);
+        const isMemoryActive = !!sock;
         const dbStatus = rows[0].session_status;
+
+        // Prefer live socket number (most up-to-date), fall back to DB record
+        // Baileys stores user id as "<number>:<device>@s.whatsapp.net"
+        const rawLiveNumber = sock?.user?.id?.split(':')[0] ?? null;
+        const rawDbNumber   = rows[0].whatsapp_number ?? null;
+        const rawNumber     = rawLiveNumber || rawDbNumber;
+
+        // Format as +<number> for consistency on the client
+        const connectedNumber = rawNumber
+            ? (rawNumber.startsWith('+') ? rawNumber : `+${rawNumber}`)
+            : null;
         
         res.json({
             status: isMemoryActive ? 'CONNECTED' : dbStatus,
-            whatsappNumber: rows[0].whatsapp_number,
+            connectedNumber,
             lastUpdated: rows[0].updated_at
         });
     } catch (error: any) {
