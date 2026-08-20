@@ -101,7 +101,11 @@ export const addPdfJobToQueue = async (
     pdfBase64?: string,
     caption?: string,
     fileName?: string,
-    mimetype?: string
+    mimetype?: string,
+    extras?: {
+        notificationId?: string;
+        callbackUrl?: string;
+    }
 ) => {
     try {
         const senderNumber = await getSenderNumber(userId);
@@ -118,7 +122,9 @@ export const addPdfJobToQueue = async (
                 pdfBase64,
                 caption,
                 fileName: finalFileName,
-                mimetype
+                mimetype,
+            notificationId: extras?.notificationId,
+            callbackUrl: extras?.callbackUrl
             },
             {
                 delay
@@ -140,7 +146,11 @@ export const addDocumentJobToQueue = addPdfJobToQueue;
 export const addExcelMessageJobToQueue = async (
     userId: string,
     targetNumber: string,
-    messageText: string
+    messageText: string,
+    extras?: {
+        notificationId?: string;
+        callbackUrl?: string;
+    }
 ) => {
     try {
         const senderNumber = await getSenderNumber(userId);
@@ -152,7 +162,9 @@ export const addExcelMessageJobToQueue = async (
                 userId,
                 senderNumber,
                 targetNumber,
-                messageText
+                messageText,
+            notificationId: extras?.notificationId,
+            callbackUrl: extras?.callbackUrl
             },
             {
                 delay

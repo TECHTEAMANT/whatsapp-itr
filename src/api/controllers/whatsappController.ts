@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { initSession, sessions } from '../../services/whatsapp/sessionManager';
+import { initSession, sessions, logoutSession } from '../../services/whatsapp/sessionManager';
 import { addPdfJobToQueue } from '../../queue/producer';
 import QRCode from 'qrcode';
 import { logger } from '../../utils/logger';
@@ -8,6 +8,7 @@ import * as xlsx from 'xlsx';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { addExcelMessageJobToQueue } from '../../queue/producer';
+import { formatTargetNumber, isWhatsAppJid } from '../../utils/targetNumber';
 export const startSession = async (req: Request, res: Response) => {
     const { userId } = req.body;
     
@@ -86,7 +87,7 @@ export const getSessionStatus = async (req: Request, res: Response) => {
 };
 
 export const sendPdf = async (req: Request, res: Response) => {
-    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64 } = req.body;
+    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64, notificationId, callbackUrl } = req.body;
     
     if (!userId || !targetNumber) {
         return res.status(400).json({ error: 'userId and targetNumber are required' });
@@ -100,7 +101,29 @@ export const sendPdf = async (req: Request, res: Response) => {
     }
 
     try {
-        const { jobId, delay, senderNumber } = await addPdfJobToQueue(userId, targetNumber, finalUrl, finalBase64, caption, fileName, mimetype);
+        const sock = sessions.get(userId);
+        if (!sock) {
+            const { rows } = await pool.query(
+                `SELECT session_status FROM users_whatsapp_sessions WHERE user_id = $1`,
+                [userId]
+            );
+            const dbStatus = rows[0]?.session_status || 'not_found';
+            if (dbStatus !== 'CONNECTED') {
+                return res.status(409).json({
+                    error: 'session_disconnected',
+                    status: dbStatus
+                });
+            }
+        }
+
+        const formattedNumber = isWhatsAppJid(String(targetNumber))
+            ? String(targetNumber).trim()
+            : formatTargetNumber(targetNumber);
+
+        const { jobId, delay, senderNumber } = await addPdfJobToQueue(userId, formattedNumber, finalUrl, finalBase64, caption, fileName, mimetype, {
+            notificationId,
+            callbackUrl
+        });
         res.json({
             status: 'queued',
             jobId,
@@ -114,6 +137,21 @@ export const sendPdf = async (req: Request, res: Response) => {
 };
 
 export const sendDocument = sendPdf;
+
+export const logoutUserSession = async (req: Request, res: Response) => {
+    const { userId } = req.body;
+    if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+    }
+
+    try {
+        await logoutSession(userId);
+        res.json({ status: 'success', message: 'Logged out successfully' });
+    } catch (error: any) {
+        logger.error(`Error logging out session for ${userId}: ${error.message}`);
+        res.status(500).json({ error: 'Failed to logout session' });
+    }
+};
 
 export const getGroups = async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -251,29 +289,36 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
 };
 
 export const sendTextMessage = async (req: Request, res: Response) => {
-    const { userId, targetNumber, message } = req.body;
+    const { userId, targetNumber, message, notificationId, callbackUrl } = req.body;
     
     if (!userId || !targetNumber || !message) {
         return res.status(400).json({ error: 'userId, targetNumber, and message are required' });
     }
 
-    const sock = sessions.get(userId);
-    if (!sock) {
-        return res.status(400).json({ error: 'WhatsApp session not connected for this user.' });
-    }
-
     try {
-        let formattedNumber = targetNumber.toString().trim();
-        const cleanNumber = formattedNumber.replace(/\D/g, '');
-        if (cleanNumber.length === 10) {
-            formattedNumber = `91${cleanNumber}`;
-        } else if (cleanNumber.startsWith('91') && cleanNumber.length === 12) {
-            formattedNumber = cleanNumber;
-        } else {
-            formattedNumber = cleanNumber;
+        const sock = sessions.get(userId);
+        if (!sock) {
+            const { rows } = await pool.query(
+                `SELECT session_status FROM users_whatsapp_sessions WHERE user_id = $1`,
+                [userId]
+            );
+            const dbStatus = rows[0]?.session_status || 'not_found';
+            if (dbStatus !== 'CONNECTED') {
+                return res.status(409).json({
+                    error: 'session_disconnected',
+                    status: dbStatus
+                });
+            }
         }
 
-        const { jobId, delay, senderNumber } = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim());
+        const formattedNumber = isWhatsAppJid(String(targetNumber))
+            ? String(targetNumber).trim()
+            : formatTargetNumber(targetNumber);
+
+        const { jobId, delay, senderNumber } = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim(), {
+            notificationId,
+            callbackUrl
+        });
         res.json({
             status: 'queued',
             jobId,

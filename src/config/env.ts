@@ -17,5 +17,7 @@ export const config = {
     redis: {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379', 10)
-    }
+    },
+    backendApiUrl: (process.env.BACKEND_API_URL || '').replace(/\/+$/, ''),
+    backendCallbackToken: process.env.BACKEND_CALLBACK_TOKEN || process.env.WHATSAPP_QR_CALLBACK_TOKEN || ''
 };

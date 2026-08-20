@@ -2,6 +2,7 @@ import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaile
 import { Boom } from '@hapi/boom';
 import { logger } from '../../utils/logger';
 import { pool } from '../../database/connection';
+import { notifySessionStatus } from '../../utils/backendWebhook';
 import fs from 'fs';
 import path from 'path';
 
@@ -73,6 +74,13 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
                     if (fs.existsSync(userSessionDir)) {
                         fs.rmSync(userSessionDir, { recursive: true, force: true });
                     }
+
+                    notifySessionStatus({
+                        userId,
+                        status: 'DISCONNECTED',
+                        connectedNumber: null,
+                        reason: 'logged_out'
+                    }).catch(() => undefined);
                 }
             } else if (connection === 'open') {
                 logger.info(`Session connected for ${userId}`);
@@ -86,6 +94,13 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
                      ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = $2, session_status = $3, updated_at = CURRENT_TIMESTAMP`,
                     [userId, userNumber, 'CONNECTED']
                 );
+
+                notifySessionStatus({
+                    userId,
+                    status: 'CONNECTED',
+                    connectedNumber: userNumber ? `+${userNumber}` : null,
+                    reason: 'connected'
+                }).catch(() => undefined);
             }
         });
 
@@ -152,3 +167,40 @@ export const getSenderNumber = async (userId: string): Promise<string> => {
     }
 };
 
+
+export const logoutSession = async (userId: string) => {
+    const sock = sessions.get(userId);
+    if (sock) {
+        try {
+            await sock.logout();
+        } catch (error: any) {
+            logger.warn(`Error during socket logout for ${userId}: ${error?.message || error}`);
+        }
+        if (sessions.get(userId) === sock) {
+            sessions.delete(userId);
+        }
+        try {
+            sock.end(undefined);
+        } catch {
+            // already closed
+        }
+    }
+
+    const userSessionDir = path.join(sessionsDir, userId);
+    if (fs.existsSync(userSessionDir)) {
+        fs.rmSync(userSessionDir, { recursive: true, force: true });
+    }
+
+    await pool.query(
+        `INSERT INTO users_whatsapp_sessions (user_id, session_status) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET session_status = $2, updated_at = CURRENT_TIMESTAMP`,
+        [userId, 'DISCONNECTED']
+    );
+
+    await notifySessionStatus({
+        userId,
+        status: 'DISCONNECTED',
+        connectedNumber: null,
+        reason: 'logout'
+    });
+};
