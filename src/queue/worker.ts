@@ -100,6 +100,16 @@ export const setupWorker = () => {
                     `INSERT INTO message_logs (user_id, target_number, message_type, status) VALUES ($1, $2, $3, $4)`,
                     [userId, targetNumber, 'document', 'sent']
                 );
+
+                if (notificationId) {
+                    await notifyMessageStatus({
+                        notificationId,
+                        jobId: job.id,
+                        userId,
+                        targetNumber,
+                        status: 'sent'
+                    }, job.data.backendUrl).catch(() => undefined);
+                }
                 
                 logger.info(`Successfully processed job ${job.id} for user ${userId} (Sender Account: ${sender})`);
             } catch (error: any) {
@@ -121,7 +131,7 @@ export const setupWorker = () => {
                     status: 'failed',
                     error: message,
                     code: disconnected ? 'session_disconnected' : undefined
-                });
+                }, job.data.backendUrl).catch(() => undefined);
                 
                 throw error;
             }
@@ -149,6 +159,16 @@ export const setupWorker = () => {
                     `INSERT INTO message_logs (user_id, target_number, message_type, status) VALUES ($1, $2, $3, $4)`,
                     [userId, targetNumber, 'text', 'sent']
                 );
+
+                if (notificationId) {
+                    await notifyMessageStatus({
+                        notificationId,
+                        jobId: job.id,
+                        userId,
+                        targetNumber,
+                        status: 'sent'
+                    }, job.data.backendUrl).catch(() => undefined);
+                }
                 
                 logger.info(`Successfully processed excel text job ${job.id} for user ${userId} (Sender Account: ${sender})`);
             } catch (error: any) {
@@ -170,7 +190,7 @@ export const setupWorker = () => {
                     status: 'failed',
                     error: message,
                     code: disconnected ? 'session_disconnected' : undefined
-                });
+                }, job.data.backendUrl).catch(() => undefined);
                 
                 throw error;
             }

@@ -105,6 +105,7 @@ export const addPdfJobToQueue = async (
     extras?: {
         notificationId?: string;
         callbackUrl?: string;
+        backendUrl?: string;
     }
 ) => {
     try {
@@ -123,8 +124,9 @@ export const addPdfJobToQueue = async (
                 caption,
                 fileName: finalFileName,
                 mimetype,
-            notificationId: extras?.notificationId,
-            callbackUrl: extras?.callbackUrl
+                notificationId: extras?.notificationId,
+                callbackUrl: extras?.callbackUrl,
+                backendUrl: extras?.backendUrl
             },
             {
                 delay
@@ -150,6 +152,7 @@ export const addExcelMessageJobToQueue = async (
     extras?: {
         notificationId?: string;
         callbackUrl?: string;
+        backendUrl?: string;
     }
 ) => {
     try {
@@ -163,13 +166,15 @@ export const addExcelMessageJobToQueue = async (
                 senderNumber,
                 targetNumber,
                 messageText,
-            notificationId: extras?.notificationId,
-            callbackUrl: extras?.callbackUrl
+                notificationId: extras?.notificationId,
+                callbackUrl: extras?.callbackUrl,
+                backendUrl: extras?.backendUrl
             },
             {
                 delay
             }
         );
+
 
         logger.info(
             `Added excel job ${job.id} for user ${userId} (sender: ${senderNumber}) to ${targetNumber} with delay: ${delay}ms`

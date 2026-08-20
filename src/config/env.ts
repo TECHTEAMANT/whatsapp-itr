@@ -18,6 +18,12 @@ export const config = {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379', 10)
     },
+    backend: {
+        devUrl: (process.env.BACKEND_API_URL_DEV || 'https://api-dev.accountsntax.com').replace(/\/+$/, ''),
+        prodUrl: (process.env.BACKEND_API_URL_PROD || 'https://api.accountsntax.com').replace(/\/+$/, ''),
+        defaultUrl: (process.env.BACKEND_API_URL || 'http://localhost:5001').replace(/\/+$/, '')
+    },
     backendApiUrl: (process.env.BACKEND_API_URL || '').replace(/\/+$/, ''),
     backendCallbackToken: process.env.BACKEND_CALLBACK_TOKEN || process.env.WHATSAPP_QR_CALLBACK_TOKEN || ''
 };
+

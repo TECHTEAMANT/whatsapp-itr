@@ -1,14 +1,15 @@
 import { Request, Response } from 'express';
 import { initSession, sessions, logoutSession } from '../../services/whatsapp/sessionManager';
-import { addPdfJobToQueue } from '../../queue/producer';
+import { addPdfJobToQueue, addExcelMessageJobToQueue } from '../../queue/producer';
 import QRCode from 'qrcode';
 import { logger } from '../../utils/logger';
 import { pool } from '../../database/connection';
 import * as xlsx from 'xlsx';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { addExcelMessageJobToQueue } from '../../queue/producer';
 import { formatTargetNumber, isWhatsAppJid } from '../../utils/targetNumber';
+import { resolveBackendUrl } from '../../utils/backendWebhook';
+
 export const startSession = async (req: Request, res: Response) => {
     const { userId } = req.body;
     
@@ -21,7 +22,9 @@ export const startSession = async (req: Request, res: Response) => {
     }
 
     try {
-        
+        const origin = (req.headers.origin || req.headers.referer || '').toString();
+        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+
         const result = await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 resolve({ status: 'timeout', message: 'QR code generation timed out' });
@@ -35,7 +38,7 @@ export const startSession = async (req: Request, res: Response) => {
                 } catch (err) {
                     reject(err);
                 }
-            }).catch(reject);
+            }, backendUrl).catch(reject);
         });
 
         res.json(result);
@@ -44,6 +47,7 @@ export const startSession = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to start session' });
     }
 };
+
 
 export const getSessionStatus = async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -120,9 +124,13 @@ export const sendPdf = async (req: Request, res: Response) => {
             ? String(targetNumber).trim()
             : formatTargetNumber(targetNumber);
 
+        const origin = (req.headers.origin || req.headers.referer || '').toString();
+        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+
         const { jobId, delay, senderNumber } = await addPdfJobToQueue(userId, formattedNumber, finalUrl, finalBase64, caption, fileName, mimetype, {
             notificationId,
-            callbackUrl
+            callbackUrl: callbackUrl || (backendUrl ? `${backendUrl}/api/v1/whatsapp-qr/webhook/message-status` : undefined),
+            backendUrl
         });
         res.json({
             status: 'queued',
@@ -211,6 +219,10 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
         let messagesSent = 0;
         let errors = [];
 
+        const origin = (req.headers.origin || req.headers.referer || '').toString();
+        const targetBackendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+        const baseUrl = targetBackendUrl.replace(/\/+$/, '');
+
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
             
@@ -254,9 +266,6 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
                 // Format: iv_encrypted
                 const token = `${iv.toString('hex')}_${encrypted}`;
 
-                // Ensure there is no trailing slash on the base URL to avoid double-slashes in the link
-                const rawBaseUrl = process.env.BACKEND_API_URL || 'http://localhost:5001';
-                const baseUrl = rawBaseUrl.replace(/\/+$/, '');
                 const uploadLink = `${baseUrl}/api/v1/whatsapp-upload/form?token=${token}`;
                 
                 // Replace [Link] if it exists, otherwise append to bottom
@@ -267,7 +276,9 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
                     finalMessage = `${message}\n\nUpload your document here: ${uploadLink}`;
                 }
 
-                await addExcelMessageJobToQueue(userId, jid, finalMessage);
+                await addExcelMessageJobToQueue(userId, jid, finalMessage, {
+                    backendUrl: targetBackendUrl
+                });
                 messagesSent++;
                 
             } catch (err: any) {
@@ -315,9 +326,13 @@ export const sendTextMessage = async (req: Request, res: Response) => {
             ? String(targetNumber).trim()
             : formatTargetNumber(targetNumber);
 
+        const origin = (req.headers.origin || req.headers.referer || '').toString();
+        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+
         const { jobId, delay, senderNumber } = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim(), {
             notificationId,
-            callbackUrl
+            callbackUrl: callbackUrl || (backendUrl ? `${backendUrl}/api/v1/whatsapp-qr/webhook/message-status` : undefined),
+            backendUrl
         });
         res.json({
             status: 'queued',
@@ -331,5 +346,6 @@ export const sendTextMessage = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to queue text message' });
     }
 };
+
 
 

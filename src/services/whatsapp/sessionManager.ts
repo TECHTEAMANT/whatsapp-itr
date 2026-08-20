@@ -9,13 +9,19 @@ import path from 'path';
 // Stores active socket connections in memory
 export const sessions = new Map<string, any>();
 
+// Stores the target backend API URL for each user session (dev vs prod)
+export const userBackendUrls = new Map<string, string>();
+
 // Ensure sessions directory exists
 const sessionsDir = path.join(process.cwd(), 'sessions');
 if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
 }
 
-export const initSession = async (userId: string, onQr?: (qr: string) => void) => {
+export const initSession = async (userId: string, onQr?: (qr: string) => void, targetBackendUrl?: string) => {
+    if (targetBackendUrl) {
+        userBackendUrls.set(userId, targetBackendUrl);
+    }
     try {
         const { state, saveCreds } = await useMultiFileAuthState(path.join(sessionsDir, userId));
         const { version } = await fetchLatestBaileysVersion();
@@ -56,7 +62,7 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
 
                     setTimeout(() => {
                         if (!sessions.has(userId)) {
-                            initSession(userId, onQr).catch((error) => {
+                            initSession(userId, onQr, userBackendUrls.get(userId)).catch((error) => {
                                 logger.error(error, `Error reconnecting session for user ${userId}:`);
                             });
                         }
@@ -80,7 +86,7 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
                         status: 'DISCONNECTED',
                         connectedNumber: null,
                         reason: 'logged_out'
-                    }).catch(() => undefined);
+                    }, userBackendUrls.get(userId)).catch(() => undefined);
                 }
             } else if (connection === 'open') {
                 logger.info(`Session connected for ${userId}`);
@@ -100,7 +106,7 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
                     status: 'CONNECTED',
                     connectedNumber: userNumber ? `+${userNumber}` : null,
                     reason: 'connected'
-                }).catch(() => undefined);
+                }, userBackendUrls.get(userId)).catch(() => undefined);
             }
         });
 
@@ -111,6 +117,7 @@ export const initSession = async (userId: string, onQr?: (qr: string) => void) =
         throw error;
     }
 };
+
 
 // Auto-reconnect all previously connected sessions on startup
 export const autoReconnectSessions = async () => {
@@ -197,10 +204,15 @@ export const logoutSession = async (userId: string) => {
         [userId, 'DISCONNECTED']
     );
 
+    const targetBackendUrl = userBackendUrls.get(userId);
+
     await notifySessionStatus({
         userId,
         status: 'DISCONNECTED',
         connectedNumber: null,
         reason: 'logout'
-    });
+    }, targetBackendUrl);
+
+    userBackendUrls.delete(userId);
 };
+
