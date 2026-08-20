@@ -7,3 +7,4 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 sessions/
+test_rate_limiter.ts

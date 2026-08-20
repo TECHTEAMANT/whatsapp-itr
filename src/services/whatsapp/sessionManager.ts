@@ -115,3 +115,40 @@ export const autoReconnectSessions = async () => {
         logger.error(error, 'Error during auto-reconnect sessions:');
     }
 };
+
+/**
+ * Resolves the underlying WhatsApp phone number for a given user.
+ * 1. Checks active memory socket first.
+ * 2. Checks DB session record next.
+ * 3. Falls back to sanitized userId if not found.
+ */
+export const getSenderNumber = async (userId: string): Promise<string> => {
+    try {
+        // 1. Check live in-memory session socket
+        const sock = sessions.get(userId);
+        if (sock?.user?.id) {
+            const raw = sock.user.id.split(':')[0] || '';
+            const digits = raw.replace(/\D/g, '');
+            if (digits) return digits;
+        }
+
+        // 2. Check DB record
+        const { rows } = await pool.query(
+            `SELECT whatsapp_number FROM users_whatsapp_sessions WHERE user_id = $1`,
+            [userId]
+        );
+        if (rows.length > 0 && rows[0].whatsapp_number) {
+            const digits = rows[0].whatsapp_number.replace(/\D/g, '');
+            if (digits) return digits;
+        }
+
+        // 3. Fallback to userId
+        const userDigits = userId.replace(/\D/g, '');
+        return userDigits || userId;
+    } catch (error) {
+        logger.error(error, `Error resolving sender number for user ${userId}:`);
+        const userDigits = userId.replace(/\D/g, '');
+        return userDigits || userId;
+    }
+};
+

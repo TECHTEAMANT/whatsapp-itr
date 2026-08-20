@@ -100,8 +100,14 @@ export const sendPdf = async (req: Request, res: Response) => {
     }
 
     try {
-        const jobId = await addPdfJobToQueue(userId, targetNumber, finalUrl, finalBase64, caption, fileName, mimetype);
-        res.json({ status: 'queued', jobId });
+        const { jobId, delay, senderNumber } = await addPdfJobToQueue(userId, targetNumber, finalUrl, finalBase64, caption, fileName, mimetype);
+        res.json({
+            status: 'queued',
+            jobId,
+            senderNumber,
+            delayMs: delay,
+            message: delay === 0 ? 'Document is sending immediately' : `Document queued with ${Math.round(delay / 1000)}s delay`
+        });
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to queue document for sending' });
     }
@@ -267,11 +273,18 @@ export const sendTextMessage = async (req: Request, res: Response) => {
             formattedNumber = cleanNumber;
         }
 
-        const jobId = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim());
-        res.json({ status: 'queued', jobId });
+        const { jobId, delay, senderNumber } = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim());
+        res.json({
+            status: 'queued',
+            jobId,
+            senderNumber,
+            delayMs: delay,
+            message: delay === 0 ? 'Message is sending immediately' : `Message queued with ${Math.round(delay / 1000)}s delay`
+        });
     } catch (error: any) {
         logger.error(`Error queuing text message for ${userId}: ${error.message}`);
         res.status(500).json({ error: 'Failed to queue text message' });
     }
 };
+
 

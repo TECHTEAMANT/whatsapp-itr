@@ -3,11 +3,12 @@ import { redis } from '../database/redis';
 import { logger } from '../utils/logger';
 import { sendPdfDocumentFromUrl, sendPdfDocumentFromBase64 } from '../services/whatsapp/messageSender';
 import { pool } from '../database/connection';
-import { sessions } from '../services/whatsapp/sessionManager';
+import { sessions, getSenderNumber } from '../services/whatsapp/sessionManager';
 
 export const setupWorker = () => {
     const worker = new Worker('messageQueue', async (job: Job) => {
-        logger.info(`Processing job ${job.id} of type ${job.name}`);
+        const sender = job.data.senderNumber || await getSenderNumber(job.data.userId);
+        logger.info(`Processing job ${job.id} of type ${job.name} for user ${job.data.userId} (Sender Account: ${sender})`);
         
         if (job.name === 'sendPdf' || job.name === 'sendDocument') {
             const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64 } = job.data;
@@ -30,9 +31,9 @@ export const setupWorker = () => {
                     [userId, targetNumber, 'document', 'sent']
                 );
                 
-                logger.info(`Successfully processed job ${job.id}`);
+                logger.info(`Successfully processed job ${job.id} for user ${userId} (Sender Account: ${sender})`);
             } catch (error: any) {
-                logger.error(`Error processing job ${job.id}: ${error.message}`);
+                logger.error(`Error processing job ${job.id} for sender ${sender}: ${error.message}`);
                 
                 // Log failure in database
                 await pool.query(
@@ -63,9 +64,9 @@ export const setupWorker = () => {
                     [userId, targetNumber, 'text', 'sent']
                 );
                 
-                logger.info(`Successfully processed excel text job ${job.id}`);
+                logger.info(`Successfully processed excel text job ${job.id} for user ${userId} (Sender Account: ${sender})`);
             } catch (error: any) {
-                logger.error(`Error processing excel text job ${job.id}: ${error.message}`);
+                logger.error(`Error processing excel text job ${job.id} for sender ${sender}: ${error.message}`);
                 
                 // Log failure in database
                 await pool.query(
@@ -78,16 +79,13 @@ export const setupWorker = () => {
         }
     }, {
         connection: redis as any,
-        concurrency: 1, // MUST be 1. WhatsApp bans accounts that send concurrent bulk messages. Simulates a single human.
-        limiter: {
-            max: 1, // Only send 1 message...
-            duration: 45000 // ...every 45 seconds. This is a much safer threshold for WhatsApp's anti-spam system.
-        }
+        concurrency: 50, // Parallel sends across different WhatsApp accounts. Same-account rate limits are enforced dynamically via per-sender scheduling.
     });
 
     worker.on('failed', (job, err) => {
         logger.error(`Job ${job?.id} failed with error ${err.message}`);
     });
 
-    logger.info('Message worker setup completed');
+    logger.info('Message worker setup completed (concurrency: 50)');
 };
+
