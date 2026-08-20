@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { sendPdfDocumentFromUrl, sendPdfDocumentFromBase64 } from '../services/whatsapp/messageSender';
 import { pool } from '../database/connection';
 import { sessions } from '../services/whatsapp/sessionManager';
+import { notifyMessageStatus } from '../utils/backendWebhook';
 
 export const setupWorker = () => {
     const worker = new Worker('messageQueue', async (job: Job) => {
@@ -43,7 +44,7 @@ export const setupWorker = () => {
                 throw error;
             }
         } else if (job.name === 'sendExcelMessage') {
-            const { userId, targetNumber, messageText } = job.data;
+            const { userId, targetNumber, messageText, notificationId } = job.data;
             try {
                 const sock = sessions.get(userId);
                 if (!sock) throw new Error('WhatsApp session not connected for this user.');
@@ -62,6 +63,14 @@ export const setupWorker = () => {
                     `INSERT INTO message_logs (user_id, target_number, message_type, status) VALUES ($1, $2, $3, $4)`,
                     [userId, targetNumber, 'text', 'sent']
                 );
+
+                await notifyMessageStatus({
+                    notificationId,
+                    jobId: job.id,
+                    userId,
+                    targetNumber,
+                    status: 'sent'
+                });
                 
                 logger.info(`Successfully processed excel text job ${job.id}`);
             } catch (error: any) {
@@ -72,6 +81,18 @@ export const setupWorker = () => {
                     `INSERT INTO message_logs (user_id, target_number, message_type, status, error_message) VALUES ($1, $2, $3, $4, $5)`,
                     [userId, targetNumber, 'text', 'failed', error.message]
                 );
+
+                const message = error?.message || String(error);
+                const disconnected = /not connected|session not connected/i.test(message);
+                await notifyMessageStatus({
+                    notificationId,
+                    jobId: job.id,
+                    userId,
+                    targetNumber,
+                    status: 'failed',
+                    error: message,
+                    code: disconnected ? 'session_disconnected' : undefined
+                });
                 
                 throw error;
             }

@@ -70,13 +70,19 @@ export const addDocumentJobToQueue = addPdfJobToQueue;
 export const addExcelMessageJobToQueue = async (
     userId: string,
     targetNumber: string,
-    messageText: string
+    messageText: string,
+    extras?: {
+        notificationId?: string;
+        callbackUrl?: string;
+    }
 ) => {
     try {
         const job = await messageQueue.add('sendExcelMessage', {
             userId,
             targetNumber,
-            messageText
+            messageText,
+            notificationId: extras?.notificationId,
+            callbackUrl: extras?.callbackUrl
         });
         return job.id;
     } catch (error) {
