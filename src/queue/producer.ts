@@ -44,7 +44,11 @@ export const addPdfJobToQueue = async (
     pdfBase64?: string,
     caption?: string,
     fileName?: string,
-    mimetype?: string
+    mimetype?: string,
+    extras?: {
+        notificationId?: string;
+        callbackUrl?: string;
+    }
 ) => {
     try {
         const finalFileName = resolveFileName(fileName, pdfUrl);
@@ -55,7 +59,9 @@ export const addPdfJobToQueue = async (
             pdfBase64,
             caption,
             fileName: finalFileName,
-            mimetype
+            mimetype,
+            notificationId: extras?.notificationId,
+            callbackUrl: extras?.callbackUrl
         });
         logger.info(`Added job ${job.id} to queue for user ${userId} to number ${targetNumber}`);
         return job.id;

@@ -87,7 +87,7 @@ export const getSessionStatus = async (req: Request, res: Response) => {
 };
 
 export const sendPdf = async (req: Request, res: Response) => {
-    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64 } = req.body;
+    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64, notificationId, callbackUrl } = req.body;
     
     if (!userId || !targetNumber) {
         return res.status(400).json({ error: 'userId and targetNumber are required' });
@@ -101,7 +101,29 @@ export const sendPdf = async (req: Request, res: Response) => {
     }
 
     try {
-        const jobId = await addPdfJobToQueue(userId, targetNumber, finalUrl, finalBase64, caption, fileName, mimetype);
+        const sock = sessions.get(userId);
+        if (!sock) {
+            const { rows } = await pool.query(
+                `SELECT session_status FROM users_whatsapp_sessions WHERE user_id = $1`,
+                [userId]
+            );
+            const dbStatus = rows[0]?.session_status || 'not_found';
+            if (dbStatus !== 'CONNECTED') {
+                return res.status(409).json({
+                    error: 'session_disconnected',
+                    status: dbStatus
+                });
+            }
+        }
+
+        const formattedNumber = isWhatsAppJid(String(targetNumber))
+            ? String(targetNumber).trim()
+            : formatTargetNumber(targetNumber);
+
+        const jobId = await addPdfJobToQueue(userId, formattedNumber, finalUrl, finalBase64, caption, fileName, mimetype, {
+            notificationId,
+            callbackUrl
+        });
         res.json({ status: 'queued', jobId });
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to queue document for sending' });
