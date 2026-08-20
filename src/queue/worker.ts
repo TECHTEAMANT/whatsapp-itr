@@ -9,23 +9,25 @@ export const setupWorker = () => {
     const worker = new Worker('messageQueue', async (job: Job) => {
         logger.info(`Processing job ${job.id} of type ${job.name}`);
         
-        if (job.name === 'sendPdf') {
-            const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName } = job.data;
+        if (job.name === 'sendPdf' || job.name === 'sendDocument') {
+            const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64 } = job.data;
+            const fileUrl = pdfUrl || url;
+            const fileBase64 = pdfBase64 || base64;
             
             try {
-                // Send PDF document logic
-                if (pdfBase64) {
-                    await sendPdfDocumentFromBase64(userId, targetNumber, pdfBase64, fileName, caption);
-                } else if (pdfUrl) {
-                    await sendPdfDocumentFromUrl(userId, targetNumber, pdfUrl, fileName, caption);
+                // Send document logic
+                if (fileBase64) {
+                    await sendPdfDocumentFromBase64(userId, targetNumber, fileBase64, fileName, caption, mimetype);
+                } else if (fileUrl) {
+                    await sendPdfDocumentFromUrl(userId, targetNumber, fileUrl, fileName, caption, mimetype);
                 } else {
-                    throw new Error('Neither pdfUrl nor pdfBase64 was provided in job data');
+                    throw new Error('Neither fileUrl nor fileBase64 was provided in job data');
                 }
                 
                 // Log success in database
                 await pool.query(
                     `INSERT INTO message_logs (user_id, target_number, message_type, status) VALUES ($1, $2, $3, $4)`,
-                    [userId, targetNumber, 'pdf', 'sent']
+                    [userId, targetNumber, 'document', 'sent']
                 );
                 
                 logger.info(`Successfully processed job ${job.id}`);
@@ -35,7 +37,7 @@ export const setupWorker = () => {
                 // Log failure in database
                 await pool.query(
                     `INSERT INTO message_logs (user_id, target_number, message_type, status, error_message) VALUES ($1, $2, $3, $4, $5)`,
-                    [userId, targetNumber, 'pdf', 'failed', error.message]
+                    [userId, targetNumber, 'document', 'failed', error.message]
                 );
                 
                 throw error;

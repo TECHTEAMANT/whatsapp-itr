@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import path from 'path';
 import { redis } from '../database/redis';
 import { logger } from '../utils/logger';
 
@@ -15,22 +16,46 @@ export const messageQueue = new Queue('messageQueue', {
     }
 });
 
+/**
+ * Resolves the filename from the provided fileName or extracts it from the URL
+ */
+const resolveFileName = (fileName?: string, url?: string): string => {
+    if (fileName && fileName.trim()) {
+        return fileName.trim();
+    }
+    if (url) {
+        try {
+            const cleanUrl = url.split('?')[0].split('#')[0];
+            const extracted = path.basename(cleanUrl);
+            if (extracted && path.extname(extracted)) {
+                return extracted;
+            }
+        } catch {
+            // fallback
+        }
+    }
+    return 'document.pdf';
+};
+
 export const addPdfJobToQueue = async (
     userId: string,
     targetNumber: string,
     pdfUrl?: string,
     pdfBase64?: string,
     caption?: string,
-    fileName?: string
+    fileName?: string,
+    mimetype?: string
 ) => {
     try {
+        const finalFileName = resolveFileName(fileName, pdfUrl);
         const job = await messageQueue.add('sendPdf', {
             userId,
             targetNumber,
             pdfUrl,
             pdfBase64,
             caption,
-            fileName: fileName || 'document.pdf'
+            fileName: finalFileName,
+            mimetype
         });
         logger.info(`Added job ${job.id} to queue for user ${userId} to number ${targetNumber}`);
         return job.id;
@@ -39,6 +64,8 @@ export const addPdfJobToQueue = async (
         throw error;
     }
 };
+
+export const addDocumentJobToQueue = addPdfJobToQueue;
 
 export const addExcelMessageJobToQueue = async (
     userId: string,

@@ -86,23 +86,28 @@ export const getSessionStatus = async (req: Request, res: Response) => {
 };
 
 export const sendPdf = async (req: Request, res: Response) => {
-    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName } = req.body;
+    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64 } = req.body;
     
     if (!userId || !targetNumber) {
         return res.status(400).json({ error: 'userId and targetNumber are required' });
     }
     
-    if (!pdfUrl && !pdfBase64) {
-        return res.status(400).json({ error: 'Either pdfUrl or pdfBase64 must be provided' });
+    const finalUrl = pdfUrl || url;
+    const finalBase64 = pdfBase64 || base64;
+
+    if (!finalUrl && !finalBase64) {
+        return res.status(400).json({ error: 'Either pdfUrl/url or pdfBase64/base64 must be provided' });
     }
 
     try {
-        const jobId = await addPdfJobToQueue(userId, targetNumber, pdfUrl, pdfBase64, caption, fileName);
+        const jobId = await addPdfJobToQueue(userId, targetNumber, finalUrl, finalBase64, caption, fileName, mimetype);
         res.json({ status: 'queued', jobId });
     } catch (error: any) {
-        res.status(500).json({ error: 'Failed to queue PDF for sending' });
+        res.status(500).json({ error: 'Failed to queue document for sending' });
     }
 };
+
+export const sendDocument = sendPdf;
 
 export const getGroups = async (req: Request, res: Response) => {
     const { userId } = req.params;
