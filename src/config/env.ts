@@ -19,9 +19,9 @@ export const config = {
         port: parseInt(process.env.REDIS_PORT || '6379', 10)
     },
     backend: {
-        devUrl: (process.env.BACKEND_API_URL_DEV || 'https://api-dev.accountsntax.com').replace(/\/+$/, ''),
-        prodUrl: (process.env.BACKEND_API_URL_PROD || 'https://api.accountsntax.com').replace(/\/+$/, ''),
-        defaultUrl: (process.env.BACKEND_API_URL || 'https://api-dev.accountsntax.com').replace(/\/+$/, '')
+        devUrl: (process.env.BACKEND_API_URL_DEV || 'https://apis-dev.accountsntax.com').replace(/\/+$/, ''),
+        prodUrl: (process.env.BACKEND_API_URL_PROD || 'https://apis.accountsntax.com').replace(/\/+$/, ''),
+        defaultUrl: (process.env.BACKEND_API_URL || 'https://apis-dev.accountsntax.com').replace(/\/+$/, '')
     },
     backendApiUrl: (process.env.BACKEND_API_URL || '').replace(/\/+$/, ''),
     backendCallbackToken: process.env.BACKEND_CALLBACK_TOKEN || process.env.WHATSAPP_QR_CALLBACK_TOKEN || ''
