@@ -38,6 +38,9 @@ export const initDb = async () => {
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            ALTER TABLE users_whatsapp_sessions ADD COLUMN IF NOT EXISTS backend_url VARCHAR(255);
+            ALTER TABLE users_whatsapp_sessions ADD COLUMN IF NOT EXISTS environment VARCHAR(50);
         `);
         logger.info('Database tables initialized');
     } catch (err: any) {

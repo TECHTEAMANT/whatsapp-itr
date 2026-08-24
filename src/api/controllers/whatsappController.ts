@@ -5,13 +5,12 @@ import QRCode from 'qrcode';
 import { logger } from '../../utils/logger';
 import { pool } from '../../database/connection';
 import * as xlsx from 'xlsx';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { formatTargetNumber, isWhatsAppJid } from '../../utils/targetNumber';
-import { resolveBackendUrl } from '../../utils/backendWebhook';
+import { resolveBackendUrl, syncSessionEnvironment } from '../../utils/backendWebhook';
 
 export const startSession = async (req: Request, res: Response) => {
-    const { userId } = req.body;
+    const { userId, environment } = req.body;
     
     if (!userId) {
         return res.status(400).json({ error: 'userId is required' });
@@ -23,7 +22,7 @@ export const startSession = async (req: Request, res: Response) => {
 
     try {
         const origin = (req.headers.origin || req.headers.referer || '').toString();
-        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin, undefined, environment);
 
         const result = await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
@@ -38,7 +37,7 @@ export const startSession = async (req: Request, res: Response) => {
                 } catch (err) {
                     reject(err);
                 }
-            }, backendUrl).catch(reject);
+            }, backendUrl, environment).catch(reject);
         });
 
         res.json(result);
@@ -57,8 +56,17 @@ export const getSessionStatus = async (req: Request, res: Response) => {
     }
 
     try {
+        const origin = (req.headers.origin || req.headers.referer || '').toString();
+        const explicitBackendUrl = (req.query.backendUrl || req.headers['x-backend-url']) as string | undefined;
+        const explicitEnv = (req.query.environment || req.headers['x-environment']) as string | undefined;
+        
+        // Self-heal environment and backend_url for existing sessions if currently NULL
+        if (origin || explicitBackendUrl || explicitEnv) {
+            syncSessionEnvironment(userId, origin, explicitBackendUrl, explicitEnv).catch(() => undefined);
+        }
+
         const { rows } = await pool.query(
-            `SELECT session_status, whatsapp_number, updated_at FROM users_whatsapp_sessions WHERE user_id = $1`,
+            `SELECT session_status, whatsapp_number, environment, backend_url, updated_at FROM users_whatsapp_sessions WHERE user_id = $1`,
             [userId]
         );
         
@@ -83,7 +91,8 @@ export const getSessionStatus = async (req: Request, res: Response) => {
         
         res.json({
             status: isMemoryActive ? 'CONNECTED' : dbStatus,
-            connectedNumber
+            connectedNumber,
+            environment: rows[0].environment || null
         });
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to retrieve session status' });
@@ -91,7 +100,7 @@ export const getSessionStatus = async (req: Request, res: Response) => {
 };
 
 export const sendPdf = async (req: Request, res: Response) => {
-    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64, notificationId, callbackUrl } = req.body;
+    const { userId, targetNumber, pdfUrl, pdfBase64, caption, fileName, mimetype, url, base64, notificationId, callbackUrl, environment } = req.body;
     
     if (!userId || !targetNumber) {
         return res.status(400).json({ error: 'userId and targetNumber are required' });
@@ -125,7 +134,10 @@ export const sendPdf = async (req: Request, res: Response) => {
             : formatTargetNumber(targetNumber);
 
         const origin = (req.headers.origin || req.headers.referer || '').toString();
-        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin, undefined, environment);
+
+        // Self-heal environment and backend_url for existing sessions if currently NULL
+        syncSessionEnvironment(userId, origin, backendUrl, environment).catch(() => undefined);
 
         const { jobId, delay, senderNumber } = await addPdfJobToQueue(userId, formattedNumber, finalUrl, finalBase64, caption, fileName, mimetype, {
             notificationId,
@@ -169,6 +181,14 @@ export const getGroups = async (req: Request, res: Response) => {
     }
 
     try {
+        const origin = (req.headers.origin || req.headers.referer || '').toString();
+        const explicitBackendUrl = (req.query.backendUrl || req.headers['x-backend-url']) as string | undefined;
+        const explicitEnv = (req.query.environment || req.headers['x-environment']) as string | undefined;
+
+        if (origin || explicitBackendUrl || explicitEnv) {
+            syncSessionEnvironment(userId, origin, explicitBackendUrl, explicitEnv).catch(() => undefined);
+        }
+
         const sock = sessions.get(userId);
         if (!sock) {
             return res.status(400).json({ error: 'WhatsApp session not connected for this user.' });
@@ -192,7 +212,7 @@ export const getGroups = async (req: Request, res: Response) => {
 
 export const excelWhatsapp = async (req: Request, res: Response) => {
     try {
-        const { userId } = req.body;
+        const { userId, environment } = req.body;
         const file = req.file;
 
         if (!userId) {
@@ -220,8 +240,11 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
         let errors = [];
 
         const origin = (req.headers.origin || req.headers.referer || '').toString();
-        const targetBackendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+        const targetBackendUrl = req.body.backendUrl || resolveBackendUrl(origin, undefined, environment);
         const baseUrl = targetBackendUrl.replace(/\/+$/, '');
+
+        // Self-heal environment and backend_url for existing sessions if currently NULL
+        syncSessionEnvironment(userId, origin, targetBackendUrl, environment).catch(() => undefined);
 
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
@@ -300,7 +323,7 @@ export const excelWhatsapp = async (req: Request, res: Response) => {
 };
 
 export const sendTextMessage = async (req: Request, res: Response) => {
-    const { userId, targetNumber, message, notificationId, callbackUrl } = req.body;
+    const { userId, targetNumber, message, notificationId, callbackUrl, environment } = req.body;
     
     if (!userId || !targetNumber || !message) {
         return res.status(400).json({ error: 'userId, targetNumber, and message are required' });
@@ -327,7 +350,10 @@ export const sendTextMessage = async (req: Request, res: Response) => {
             : formatTargetNumber(targetNumber);
 
         const origin = (req.headers.origin || req.headers.referer || '').toString();
-        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin);
+        const backendUrl = req.body.backendUrl || resolveBackendUrl(origin, undefined, environment);
+
+        // Self-heal environment and backend_url for existing sessions if currently NULL
+        syncSessionEnvironment(userId, origin, backendUrl, environment).catch(() => undefined);
 
         const { jobId, delay, senderNumber } = await addExcelMessageJobToQueue(userId, formattedNumber, message.trim(), {
             notificationId,
