@@ -84,6 +84,13 @@ export const initSession = async (
                 if (isPermanentDisconnect) {
                     reconnectAttempts.delete(userId);
 
+                    try {
+                        sock.ev.removeAllListeners('creds.update');
+                        sock.end(undefined);
+                    } catch (err: any) {
+                        logger.warn(`Notice: Socket already closed or error ending socket for ${userId}: ${err?.message || err}`);
+                    }
+
                     // Update DB status to disconnected
                     await pool.query(
                         `INSERT INTO users_whatsapp_sessions (user_id, session_status, backend_url, environment) 
@@ -181,7 +188,16 @@ export const initSession = async (
             }
         });
 
-        sock.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', async () => {
+            try {
+                const userDir = path.join(sessionsDir, userId);
+                if (fs.existsSync(userDir)) {
+                    await saveCreds();
+                }
+            } catch (err: any) {
+                logger.warn(`Could not save credentials for user ${userId}: ${err?.message || err}`);
+            }
+        });
         return sock;
     } catch (error) {
         logger.error(error, `Error initializing session for user ${userId}:`);
@@ -250,6 +266,7 @@ export const logoutSession = async (userId: string) => {
     const sock = sessions.get(userId);
     if (sock) {
         try {
+            sock.ev.removeAllListeners('creds.update');
             await sock.logout();
         } catch (error: any) {
             logger.warn(`Error during socket logout for ${userId}: ${error?.message || error}`);
@@ -259,8 +276,8 @@ export const logoutSession = async (userId: string) => {
         }
         try {
             sock.end(undefined);
-        } catch {
-            // already closed
+        } catch (err: any) {
+            logger.warn(`Notice: Socket already closed or error ending socket during logout for ${userId}: ${err?.message || err}`);
         }
     }
 

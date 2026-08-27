@@ -60,4 +60,13 @@ app.listen(config.port, async () => {
     setupWorker();
 });
 
+// Process-level guards to prevent single session crashes from killing the entire service
+process.on('unhandledRejection', (reason: any) => {
+    logger.error(reason, 'Unhandled Promise Rejection caught:');
+});
+
+process.on('uncaughtException', (err: Error) => {
+    logger.error(err, 'Uncaught Exception caught:');
+});
+
 export default app;
